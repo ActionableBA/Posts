@@ -1,0 +1,20 @@
+# How to wrangle EXCEL files with Python
+# as seen on www.actionable-business-analytics.com/concatenate-excel-files
+import pandas as pd
+import os
+
+# Find file names in the specified directory
+loc = 'C:\Users\Filepath_to_Excel_Files\\'
+files = os.listdir(loc)
+
+# Find the Excel files
+files_xlsx = [f for f in files if f[-4:] == 'xlsx']
+
+# Create empty dataframe and read in new data
+sales = pd.DataFrame()
+for f in files_xlsx:
+    New_data = pd.read_excel(os.path.normpath(loc + f), 'Sheet1')
+    sales = sales.append(New_data)
+
+# Output new dataframe to Excel
+sales.to_excel(loc + '\\sales_merged.xlsx')
