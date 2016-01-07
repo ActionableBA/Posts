@@ -1,0 +1,36 @@
+import pandas as pd
+import numpy as np
+from os import path
+import win32com.client
+loc='File Location'
+
+master = pd.read_excel(path.join(loc, 'FileName.xlsx'))
+emails = pd.read_excel(path.join(loc, 'FileName.xlsx'))
+
+# Reformat Columns for Output
+master['COLUMN'] = pd.Series(["{0:.1f}%".format(val* 100) for val in master['COLUMN']], index = master.index)
+master['COLUMN2'] = pd.Series(["${:,.0f}".format(val) for val in master['COLUMN2']], index = master.index)
+
+# Split Master file into separate files based on ID
+for name in pd.unique(master.ID_COLUMN.ravel()):
+    file = master.loc[master.ID_COLUMN == name,:]
+    file.to_excel(path.join(loc_dest, 'FILENAME_PREFIX_' + name.strip() + '.xlsx'), sheet_name='NAME', index=False, )
+
+# Set up Outlook to send your emails
+o = win32com.client.Dispatch("Outlook.Application")
+# s.Logon("Outlook2003")
+
+# Iterate through e-mail list and send attached spreadsheets
+email_list = dict(zip(emails.ID_COLUMN, emails.EMAIL_COLUMN))
+for name in pd.unique(emails.ID_COLUMN.ravel()):
+    name_strip = name.strip()
+    Msg = o.CreateItem(0)
+    Msg.To = email_list[name]
+
+    Msg.Subject = "PLACE SUBJECT HERE"
+    Msg.Body = "PLACE BODY MESSAGE HERE, USE /n FOR A NEW LINE"
+
+    attachment1 = path.join(loc_dest, 'FILENAME_PREFIX' + name.strip() + '.xlsx')
+    Msg.Attachments.Add(attachment1)
+
+    Msg.Send()
