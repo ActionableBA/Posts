@@ -1,0 +1,34 @@
+Sub Download_BuyerData()
+'Process to Query SQL using VBA (Excel) and storing data in the worksheet
+'Initializes variables
+Dim cnn As New ADODB.Connection
+Dim rst As New ADODB.Recordset
+Dim ConnectionString As String
+Dim StrQuery As String
+Dim Start_Date As String
+Dim End_Date As String
+
+'Read conditions off the worksheet
+Start_Date = Sheets("Data Pull").Range("B1").Value
+End_Date = Sheets("Data Pull").Range("B2").Value
+
+'Setup the connection string for accessing MS SQL database using Windows Authentication
+   'Make sure to change:
+       '1: REMOTE_IP_ADDRESS
+       '2: DATABASE
+    ConnectionString = "Provider=SQLOLEDB.1;Data Source=SERVER;Packet Size=4096;Use Encryption for Data=False;Initial Catalog=DATABASE;Trusted_connection=yes;"
+
+    'Opens connection to the database
+    cnn.Open ConnectionString
+    'Timeout error in seconds for executing the entire query; this will run for 15 minutes before VBA timesout, but your database might timeout before this value
+    cnn.CommandTimeout = 900
+
+    'This is your actual MS SQL query as a string that you need to run; you should check this query first using a more robust SQL editor (such as SQL Server) to ensure your query is valid
+    StrQuery = "select * from Table1 a left outer join Table2 b on b.ID = a.ID" & _
+    "where dateColumn > Start_Date and dateColumn < End_Date"
+
+    'Performs the actual query
+    rst.Open StrQuery, cnn
+    'Dumps all the results from the StrQuery into cell A2 of the specified worksheet
+    Sheets("Data Pull").Range("A2").CopyFromRecordset rst
+End Sub
