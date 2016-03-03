@@ -18,3 +18,4 @@ for f in files_xlsx:
 
 # Output new dataframe to Excel
 sales.to_excel(loc + '\\sales_merged.xlsx')
+ 
