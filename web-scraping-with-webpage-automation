@@ -1,0 +1,52 @@
+
+# Gathering Data with web page Automation
+# Posted on actionable-business-analytics.com
+# Updated 3/3/2016
+import time
+import pandas as pd
+
+# store webpage of interest
+# this webpage offers zip code lookup for a specified radius
+webpage = 'https://www.freemaptools.com/find-zip-codes-inside-radius.htm'
+
+# read zip location from a csv file
+zips = pd.read_csv('FILEPATH',sep=',')
+
+# open Chrome and prepare to load in zips
+driver = webdriver.Chrome('FILEPATH to chromedriver.exe')
+driver.get(webpage)
+
+# Find Elements of webpage that need to be changed (parameters)
+# Radius represents the # of miles that are searched around the zip codes
+radius = driver.find_element_by_name("tb_radius_miles")
+radius.clear()
+radius.send_keys("MILES")
+
+origin_zip = driver.find_element_by_name("goto")
+draw = driver.find_element_by_name("Go")
+
+def get_surrounding_zips(row):
+    # input text into fields
+    origin_zip.clear()
+    new_zip = row['ZIP_FIELD_NAME']
+    # Data Cleaning (zips submitted must be 5 characters)
+    if len(str(new_zip)) == 4:
+        new_zip = '0' + str(new_zip)
+    else:
+        origin_zip.send_keys(row['ZIP_FIELD_NAME'])  # send the zip code
+    # element.clear()
+    # origin_zip.submit()
+
+    draw.click() # submit to get the surrounding zip codes
+
+    time.sleep(1) # set a delay to process and not overload the website servers
+
+    zips = driver.find_element_by_id("tb_output")
+
+    newzips = zips.get_attribute("value") # read the value of the resulting zips
+    return newzips
+
+zips['NEW_ZIPS_FIELD_NAME'] = bps.apply(get_surrounding_zips, axis=1)
+
+# zips now contains all zips surrounding the uploaded zip codes
+zips
