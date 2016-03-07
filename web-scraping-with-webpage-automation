@@ -4,6 +4,7 @@
 # Updated 3/3/2016
 import time
 import pandas as pd
+from selenium import webdriver
 
 # store webpage of interest
 # this webpage offers zip code lookup for a specified radius
