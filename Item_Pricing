@@ -1,0 +1,139 @@
+import pandas as pd
+import datetime
+import xlrd
+import numpy as np
+from os import path
+import csv
+loc = ''
+loc_dest = ''
+
+def outcsv(x):
+    x.to_csv(path.join(loc_dest, 'test.csv'), sep=',')
+'''
+pkg1 = pkg1[pkg1['WeightOfPkg_Pct'] < 2]
+pkg1 = pkg1.reset_index()
+pkg1 = pkg1.drop_duplicates(subset='itemno')
+pkg1.to_csv(path.join(loc_dest, 'heavy_items.csv'), sep=',')
+'''
+
+pkg = pd.read_csv(path.join(loc, 'pkg_data.csv'), encoding='cp1252')
+zones = pd.read_csv(path.join(loc, 'zones.csv'), index_col='Zip Codes')
+zones_air = pd.read_csv(path.join(loc, 'zones_air.csv'), index_col='Zip Codes')
+upsground = pd.read_csv(path.join(loc, 'upsground.csv'), index_col='weight')
+ups_next_day_air = pd.read_csv(path.join(loc, 'ups_next_day_air.csv'), index_col='weight')
+ups_next_day_air_saver = pd.read_csv(path.join(loc, 'ups_next_day_air_saver.csv'), index_col='weight')
+ups_2_day_air = pd.read_csv(path.join(loc, 'ups_2_day_air.csv'), index_col='weight')
+ups_3_day_select = pd.read_csv(path.join(loc, 'ups_3_day_select.csv'), index_col='weight')
+
+# Calculate UPS Zone based on the first 3 of Destination Zip Code
+# subsetted for checking work pkg = pkg[pkg['itype'] == 4]
+pkg['zip_str'] = pkg.DSTZIP.map(str)
+pkg['zip3'] = pkg['zip_str'].str[:3]
+pkg = pkg.convert_objects(convert_numeric=True)
+pkg = pd.merge(pkg, zones, how='left', left_on='zip3', right_index=True)
+pkg = pd.merge(pkg, zones_air, how='left', left_on='zip3', right_index=True)
+pkg['PKG_WEIGHT'] = pkg[["PKGWGB", "vol_equil"]].max(axis=1)
+pkg['PKG_WEIGHT'] = pkg['PKG_WEIGHT'].round()
+pkg.loc[pkg.PKG_WEIGHT < 1, ['PKG_WEIGHT']] = 1
+
+# Checking work
+# pkg.to_csv(path.join(loc_dest, 'pkgtest.csv'), sep=',')
+
+pkg['SRVTYP'] = pkg['SRVTYP'].copy().fillna(0)
+pkg['Ground Zone'] = pkg['Ground Zone'].copy().fillna(0)
+pkg['WeightOfPkg_Pct'] = pkg['weight_in_pkg'] / pkg['total_weight_in_pkg']
+
+# pkg_group = pkg.groupby('PKGID#')
+
+pkg = pkg[(pkg['Air Zone'] != 0)]
+# Process through each row to calculate UPS Shipping Costs
+result = []
+def calc_shipping(row):
+    zone = int(row['Ground Zone'])
+    weight = int(row['PKG_WEIGHT'])
+    service = row['SRVTYP']
+    itype = row['itype']
+    # if row['ithazm'] == 'Y':
+        # result.append(0)
+    # else:
+    if itype == 1:
+        air_zone = int(row['Air Zone'])
+        if service == 9:  # use 2 day air for handguns
+            try:
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+            except KeyError:
+                weight = int(np.ceil(row['pkgWGA']))
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+        elif service == 5:
+            try:
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+            except KeyError:
+                weight = int(np.ceil(row['pkgWGA']))
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+        elif service == 7:
+            try:
+                result.append(ups_3_day_select.loc[weight, str(air_zone)])
+            except KeyError:
+                weight = int(np.ceil(row['pkgWGA']))
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+        elif service == 1:
+            try:
+                result.append(ups_next_day_air.loc[weight, str(air_zone)])
+            except KeyError:
+                weight = int(np.ceil(row['pkgWGA']))
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+        elif service == 3:
+            try:
+                result.append(ups_next_day_air_saver.loc[weight, str(air_zone)])
+            except KeyError:
+                weight = int(np.ceil(row['pkgWGA']))
+                result.append(ups_2_day_air.loc[weight, str(air_zone)])
+        else:
+            result.append(np.NaN)
+    else:  # For everything other than handguns, use ground shipping
+        if itype == 2:
+            try:
+                result.append(upsground.loc[weight, str(zone)]+1.25)
+            except KeyError:
+                try:
+                    weight = int(np.ceil(row['pkgWGA']))
+                    result.append(upsground.loc[weight, str(zone)]+1.25)
+                except KeyError:
+                    result.append(np.NaN)
+        else:
+            try:
+                result.append(upsground.loc[weight, str(zone)])
+            except KeyError:
+                try:
+                    weight = int(np.ceil(row['pkgWGA']))
+                    result.append(upsground.loc[weight, str(zone)])
+                except KeyError:
+                    result.append(np.NaN)
+    return None
+
+pkg.apply(calc_shipping, axis=1)
+pkg['Shipping Cost'] = result
+pkg['Item_Ship_cost'] = pkg['Shipping Cost'] * pkg['WeightOfPkg_Pct']
+pkg['Item_Freight'] = pkg['Item_Ship_cost'] / pkg['QTY']
+
+
+pkg1 = pkg.dropna(subset=['Item_Freight'])
+item_grouped = pkg1.groupby('itemno')
+
+# item_grouped['SRVTYP'].value_counts()
+item_shipping = item_grouped['QTY', 'Item_Ship_cost'].agg([np.sum, np.count_nonzero])
+item_shipping['Avg_Ship_Cost'] = item_shipping['Item_Ship_cost', 'sum']/item_shipping['QTY', 'sum']
+ship_costs = item_shipping['Avg_Ship_Cost',]
+item_shipping.to_csv(path.join(loc_dest, 'shipping_costs.csv'), sep=',')
+
+# The shipping_costs.csv file is loaded in to the shipping_costs
+# _freightbyWeight Excel file to calculate the different freight groupings.
+
+# pkg2 = pkg1.loc[pkg1.itemno==11400].duplicated('PKGID#')
+# pkg2.to_csv(path.join(loc_dest, 'pkg2_11400.csv'), sep=',')
+
+# pkg.columns.tolist()
+# res = ols(y=df['Item_Ship_cost']), x=df[['itype', 'item_weight']]
+
+# temppkg = pkg[pkg.itemno == 92479]
+# outcsv(temppkg)
