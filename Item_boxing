@@ -1,0 +1,316 @@
+import math
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import pandas as pd
+import numpy as np
+from os import path
+
+loc = 'D:/Tables/OSR/New Boxes/'
+loc_dest = 'D:/Tables/OSR/New Boxes/'
+
+items = pd.read_csv(path.join(loc, 'item_dims.csv'), index_col='itemno')
+
+def print_full(x):
+    pd.set_option('display.max_rows', len(x))
+    print(x)
+    pd.reset_option('display.max_rows')
+
+def outcsv(x):
+    x.to_csv(path.join(loc_dest, 'test.csv'), sep=',')
+
+# Old Large Box Dimensions
+lb = 24
+wb = 15
+hb = 9.5
+
+# New Large Box Dimensions
+lb = 24
+wb = 13
+hb = 6
+
+# Example Item Dimensions
+l = 15.4
+w = 13
+h = 2.7
+
+
+class Node:
+    def __init__(self, coordinates):
+        self.x = coordinates[0]
+        self.y = coordinates[1]
+        self.z = coordinates[2]
+
+class Edge:
+    def __init__(self, start, stop):
+        self.start = start
+        self.stop  = stop
+
+class Wireframe:
+    def __init__(self):
+        self.nodes = []
+        self.edges = []
+
+    def addNodes(self, nodeList):
+        for node in nodeList:
+            self.nodes.append(Node(node))
+
+    def addEdges(self, edgeList):
+        for (start, stop) in edgeList:
+            self.edges.append(Edge(self.nodes[start], self.nodes[stop]))
+
+    def outputNodes(self):
+        print("\n --- Nodes --- ")
+        for i, node in enumerate(self.nodes):
+            print (" %d: (%.2f, %.2f, %.2f)" % (i, node.x, node.y, node.z))
+
+    def outputEdges(self):
+        print("\n --- Edges --- ")
+        for i, edge in enumerate(self.edges):
+            print(" %d: (%.2f, %.2f, %.2f)" % (i, edge.start.x, edge.start.y, edge.start.z),)
+            print("to (%.2f, %.2f, %.2f)" % (edge.stop.x,  edge.stop.y,  edge.stop.z))
+
+    def findCentre(self):
+        """ Find the centre of the wireframe. """
+
+        num_nodes = len(self.nodes)
+        meanX = sum([node.x for node in self.nodes]) / num_nodes
+        meanY = sum([node.y for node in self.nodes]) / num_nodes
+        meanZ = sum([node.z for node in self.nodes]) / num_nodes
+
+        return (meanX, meanY, meanZ)
+
+    def findDim(self):
+        """ Find the new x,y,z dimensions of the rotated box """
+
+        minX = min([node.x for node in self.nodes])
+        minY = min([node.y for node in self.nodes])
+        minZ = min([node.z for node in self.nodes])
+
+        maxX = max([node.x for node in self.nodes])
+        maxY = max([node.y for node in self.nodes])
+        maxZ = max([node.z for node in self.nodes])
+
+        return (maxX - minX, maxY - minY, maxZ - minZ)
+
+    def rotateX(self, c, radians):
+        for node in self.nodes:
+            y      = node.y - c[1]
+            z      = node.z - c[2]
+            d      = math.hypot(y, z)
+            theta  = math.atan2(y, z) + radians
+            node.z = c[2] + d * math.cos(theta)
+            node.y = c[1] + d * math.sin(theta)
+
+    def rotateY(self, c, radians):
+        for node in self.nodes:
+            x      = node.x - c[0]
+            z      = node.z - c[2]
+            d      = math.hypot(x, z)
+            theta  = math.atan2(x, z) + radians
+            node.z = c[2] + d * math.cos(theta)
+            node.x = c[0] + d * math.sin(theta)
+
+    def rotateZ(self, c, radians):
+        for node in self.nodes:
+            x      = node.x - c[0]
+            y      = node.y - c[1]
+            d      = math.hypot(y, x)
+            theta  = math.atan2(y, x) + radians
+            node.x = c[0] + d * math.cos(theta)
+            node.y = c[1] + d * math.sin(theta)
+
+    def rotateAll(self, axis, theta):
+        """ Rotate all wireframe about their centre, along a given axis by a given angle. """
+
+        rotateFunction = 'rotate' + axis
+
+        # for wireframe in self.wireframes.itervalues():
+        centre = self.findCentre()
+        getattr(self, rotateFunction)(centre, theta)
+
+# Set up Box
+cube_nodes = [(x,y,z) for x in (0,24.3) for y in (0,2.1) for z in (0,10)]
+cube = Wireframe()
+cube.addNodes(cube_nodes)
+cube.addEdges([(n,n+4) for n in range(0,4)])
+cube.addEdges([(n,n+1) for n in range(0,8,2)])
+cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+
+cube.outputNodes()
+cube.outputEdges()
+
+cube.rotateAll('Z',  -20)
+
+dim = cube.findDim()
+
+items = items.head(2)
+
+
+# Logic to approve item
+def put_item_in_box(r):
+    cube = 0
+    # Start of a new item
+    l = r['length']
+    w = r['width']
+    h = r['height']
+
+    rot_l = 0
+    rot_w = 0
+    rot_h = 0
+
+    # Set up item initially
+    cube_nodes = [(x,y,z) for x in (0,l) for y in (0,w) for z in (0,h)]
+    cube = Wireframe()
+    cube.addNodes(cube_nodes)
+    cube.addEdges([(n,n+4) for n in range(0,4)])
+    cube.addEdges([(n,n+1) for n in range(0,8,2)])
+    cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+
+    # perform initial check to see if longest dimension exceeds box digaonal
+    dim = cube.findDim()
+    if max(dim[0], dim[1], dim[2]) >= 32:
+        return 0
+
+    # rotate box around X Axis and check dims
+    while rot_l < 180*math.pi/180:
+
+        # current box dimensions
+        dim = cube.findDim()
+        cube = 0
+        # Reset item to original orientation
+        cube_nodes = [(x,y,z) for x in (0,l) for y in (0,w) for z in (0,h)]
+        cube = Wireframe()
+        cube.addNodes(cube_nodes)
+        cube.addEdges([(n,n+4) for n in range(0,4)])
+        cube.addEdges([(n,n+1) for n in range(0,8,2)])
+        cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+
+        if (dim[0] <= lb and dim[1] <= wb and dim[2] <= hb):
+            return 1
+        elif (dim[0] <= lb and dim[2] <= wb and dim[1] <= hb):
+            return 1
+        elif (dim[1] <= lb and dim[0] <= wb and dim[2] <= hb):
+            return 1
+        elif (dim[1] <= lb and dim[2] <= wb and dim[0] <= hb):
+            return 1
+        elif (dim[2] <= lb and dim[0] <= wb and dim[1] <= hb):
+            return 1
+        elif (dim[2] <= lb and dim[1] <= wb and dim[0] <= hb):
+            return 1
+
+        # increment the rotation parameter
+        rot_l += 5*math.pi/180
+        # rotate box by the rotation parameter
+        cube.rotateAll('X', rot_l)
+
+    while rot_h < 180*math.pi/180:
+        dim = cube.findDim()
+        cube = 0
+        # Set up item
+        cube_nodes = [(x,y,z) for x in (0,l) for y in (0,w) for z in (0,h)]
+        cube = Wireframe()
+        cube.addNodes(cube_nodes)
+        cube.addEdges([(n,n+4) for n in range(0,4)])
+        cube.addEdges([(n,n+1) for n in range(0,8,2)])
+        cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+
+        if (dim[0] <= lb and dim[1] <= wb and dim[2] <= hb):
+            return 1
+        elif (dim[0] <= lb and dim[2] <= wb and dim[1] <= hb):
+            return 1
+        elif (dim[1] <= lb and dim[0] <= wb and dim[2] <= hb):
+            return 1
+        elif (dim[1] <= lb and dim[2] <= wb and dim[0] <= hb):
+            return 1
+        elif (dim[2] <= lb and dim[0] <= wb and dim[1] <= hb):
+            return 1
+        elif (dim[2] <= lb and dim[1] <= wb and dim[0] <= hb):
+            return 1
+        rot_h += 5*math.pi/180
+        cube.rotateAll('Z',  rot_h)
+
+    while rot_w < 180*math.pi/180:
+        dim = cube.findDim()
+        cube = 0
+        # Set up item
+        cube_nodes = [(x,y,z) for x in (0,l) for y in (0,w) for z in (0,h)]
+        cube = Wireframe()
+        cube.addNodes(cube_nodes)
+        cube.addEdges([(n,n+4) for n in range(0,4)])
+        cube.addEdges([(n,n+1) for n in range(0,8,2)])
+        cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+
+        if (dim[0] <= lb and dim[1] <= wb and dim[2] <= hb):
+            return 1
+        elif (dim[0] <= lb and dim[2] <= wb and dim[1] <= hb):
+            return 1
+        elif (dim[1] <= lb and dim[0] <= wb and dim[2] <= hb):
+            return 1
+        elif (dim[1] <= lb and dim[2] <= wb and dim[0] <= hb):
+            return 1
+        elif (dim[2] <= lb and dim[0] <= wb and dim[1] <= hb):
+            return 1
+        elif (dim[2] <= lb and dim[1] <= wb and dim[0] <= hb):
+            return 1
+
+        rot_w += 5*math.pi/180
+        cube.rotateAll('Y',  rot_w)
+
+    return 0
+
+items['fits'] = items.apply(put_item_in_box, axis=1)
+outcsv(items[items['fits'] == 1])
+
+
+node in enumerate(cube.nodes)
+
+# rad = angle * math.pi / 180
+
+rot_l = 0
+while rot_l < 180*math.pi/180:
+    dim = cube.findDim()
+    cube.outputNodes()
+    print(cube.findDim())
+    print(rot_l)
+    rot_l += 5*math.pi/180
+    print(rot_l)
+    cube.rotateAll('X', 5*math.pi/180)
+
+while rot_l < 180*math.pi/180:
+    dim = cube.findDim()
+    print(cube.findDim())
+    cube.outputNodes()
+    cube_nodes = [(x,y,z) for x in (0,l) for y in (0,w) for z in (0,h)]
+    cube = Wireframe()
+    cube.addNodes(cube_nodes)
+    cube.addEdges([(n,n+4) for n in range(0,4)])
+    cube.addEdges([(n,n+1) for n in range(0,8,2)])
+    cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+    print(rot_l)
+    rot_l += 5*math.pi/180
+    print(rot_l)
+    cube.rotateAll('Y', rot_l)
+
+    # Set up item
+    cube_nodes = [(x,y,z) for x in (0,l) for y in (0,w) for z in (0,h)]
+    cube = Wireframe()
+    cube.addNodes(cube_nodes)
+    cube.addEdges([(n,n+4) for n in range(0,4)])
+    cube.addEdges([(n,n+1) for n in range(0,8,2)])
+    cube.addEdges([(n,n+2) for n in (0,1,4,5)])
+
+    if dim[0] < lb and dim[1] < wb and dim[2] < hb:
+        return 1
+    elif dim[0] < lb and dim[2] < wb and dim[1] < hb:
+        return 1
+    elif dim[1] < lb and dim[0] < wb and dim[2] < hb:
+        return 1
+    elif dim[1] < lb and dim[2] < wb and dim[0] < hb:
+        return 1
+    elif dim[2] < lb and dim[0] < wb and dim[1] < hb:
+        return 1
+    elif dim[2] < lb and dim[1] < wb and dim[0] < hb:
+        return 1
+
+    rot_l += 5*math.pi/180
+    cube.rotateAll('X', rot_l)
