@@ -1,0 +1,30 @@
+# Run SQL Query and save to CSV with Powershell
+
+# Connect to SQL using Windows Authentication
+# Replace these variables with your connection information
+$SQLServer = "ServerName" 
+$SQLDBName = "Database"
+$SqlQuery = "select top 10 * from TableName"
+ 
+$extractFile = "D:\Filepath\Filename.csv"
+ 
+$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+$SqlConnection.ConnectionString = "Server = $SQLServer; Database = $SQLDBName; Integrated Security = True"
+ 
+$SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+$SqlCmd.CommandText = $SqlQuery
+$SqlCmd.Connection = $SqlConnection
+ 
+$SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter
+$SqlAdapter.SelectCommand = $SqlCmd
+ 
+$DataSet = New-Object System.Data.DataSet
+$SqlAdapter.Fill($DataSet)
+ 
+$SqlConnection.Close()
+ 
+clear
+
+# Save data as a csv
+# http://technet.microsoft.com/en-us/library/ee176825.aspx
+$DataSet.Tables[0] | Export-Csv $extractFile -NoTypeInformation
