@@ -1,0 +1,54 @@
+'Runs on workbook open
+Private Sub Workbook_Open()
+    ThisWorkbook.RefreshAll
+
+'Allow time for the data to refresh
+Application.Wait (Now + TimeValue("00:00:10"))
+
+Dim myDate As Date, aDate
+myDate = Date
+aDate = Format(myDate, "mm.dd.yyyy")
+
+'Remove the workbookdata connection
+ActiveWorkbook.Connections.Item(1).Delete
+
+'Save a copy of the report on the local machine
+Application.DisplayAlerts = False
+Application.EnableEvents = False
+ActiveWorkbook.SaveAs "PATH TO SAVE LOCATION" & aDate & ".xlsx", FileFormat:=xlOpenXMLWorkbook, ReadOnlyRecommended:=False, CreateBackup:=False
+Application.EnableEvents = True
+Application.DisplayAlerts = True
+
+Call Mail_workbook_Outlook
+
+Workbooks("AutomatedReport_" & aDate & ".xlsx").Close SaveChanges:=False
+
+End Sub
+
+
+
+'Email the report
+Sub Mail_workbook_Outlook()
+
+    Dim OutApp As Object
+    Dim OutMail As Object
+
+    Set OutApp = CreateObject("Outlook.Application")
+    Set OutMail = OutApp.CreateItem(0)
+
+    On Error Resume Next
+    With OutMail
+        .to = "info@actionable-business-analytics.com;recipient2@domanin.abc"
+        .CC = ""
+        .BCC = ""
+        .Subject = "Report_" & aDate
+        .Body = "Please see the attached report."
+        .Attachments.Add ActiveWorkbook.FullName
+        .Send   'or use .Display
+    End With
+    On Error GoTo 0
+
+    Set OutMail = Nothing
+    Set OutApp = Nothing
+End Sub
+
